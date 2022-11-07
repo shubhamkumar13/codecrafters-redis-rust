@@ -4,6 +4,7 @@ use core::panic;
 use std::env;
 #[allow(unused_imports)]
 use std::fs;
+use std::io::Read;
 use std::io::Write;
 #[allow(unused_imports)]
 use std::net::TcpListener;
@@ -11,25 +12,34 @@ use std::net::TcpListener;
 use std::net::TcpStream;
 
 fn main() -> std::io::Result<()> {
-    // You can use print statements as follows for debugging, they'll be visible when running tests.
     println!("Logs from your program will appear here!");
     let addr = "127.0.0.1:6379";
 
-    // Uncomment this block to pass the first stage
     let listener = TcpListener::bind(addr).unwrap();
 
     for stream in listener.incoming() {
         match stream {
-            Ok(mut stream) => {
-                stream.write_fmt(format_args!("+PONG\r\n")).unwrap();
+            Ok(mut s) => {
+                let mut buffer: [u8; 1024] = [0; 1024];
+
+                loop {
+                    match s.read(&mut buffer) {
+                        Ok(_) => {
+                            let response = format!("+PONG\r\n");
+                            s.write(response.as_bytes())?;
+                        }
+                        Err(e) => {
+                            println!("Error reading from stream : {e:?}");
+                            break;
+                        }
+                    }
+                }
             }
-            Err(_) => (),
+            Err(e) => {
+                println!("Couldn't accept client : {e:?}");
+            }
         }
     }
 
     Ok(())
-    // match listener.accept() {
-    //     Ok((_socket, addr)) => println!("accepted new client: {:?}", addr),
-    //     Err(e) => println!("couldn't accept client: {:?}", e),
-    // }
 }

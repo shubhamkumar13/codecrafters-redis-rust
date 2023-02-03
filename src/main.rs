@@ -1,43 +1,41 @@
-#[allow(unused_imports)]
-use core::panic;
-#[allow(unused_imports)]
-use std::env;
-#[allow(unused_imports)]
-use std::fs;
-use std::io::Read;
-use std::io::Write;
-#[allow(unused_imports)]
-use std::net::TcpListener;
-#[allow(unused_imports)]
-use std::net::TcpStream;
+use anyhow::Result;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
 
-fn main() -> std::io::Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     println!("Logs from your program will appear here!");
     let addr = "127.0.0.1:6379";
 
-    let listener = TcpListener::bind(addr).unwrap();
+    let mut listener = TcpListener::bind(addr).await?;
 
-    for stream in listener.incoming() {
-        match stream {
-            Ok(mut s) => {
-                let mut buffer: [u8; 1024] = [0; 1024];
+    loop {
+        let incoming = listener.accept().await;
 
-                loop {
-                    match s.read(&mut buffer) {
-                        Ok(_) => {
-                            let response = format!("+PONG\r\n");
-                            s.write(response.as_bytes())?;
-                        }
-                        Err(e) => {
-                            println!("Error reading from stream : {e:?}");
-                            break;
-                        }
-                    }
-                }
+        match incoming {
+            Ok((stream, _)) => {
+                println!("accepted new connection");
+                tokio::spawn(async move {
+                    handle_connection(stream).await.unwrap();
+                });
             }
             Err(e) => {
-                println!("Couldn't accept client : {e:?}");
+                println!("error: {}", e);
             }
+        }
+    }
+}
+
+async fn handle_connection(mut stream: TcpStream) -> Result<()> {
+    let mut buf = [0; 512];
+
+    loop {
+        let bytes_read = stream.read(&mut buf).await?;
+        if bytes_read == 0 {
+            println!("client closed the connection");
+            break;
+        } else {
+            stream.write("+PONG\r\n".as_bytes()).await?;
         }
     }
 
